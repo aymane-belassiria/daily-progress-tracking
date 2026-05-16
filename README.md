@@ -3,14 +3,14 @@
 Private single-user progress tracking system with:
 
 - React frontend intended for GitHub Pages
-- Express + SQLite backend intended for a VPS
+- Go + SQLite backend intended for a VPS
 - JWT auth for one private account
 - NVIDIA-hosted Qwen integration for roadmap generation and progress hints
 
 ## Architecture
 
 - `frontend/`: Vite + React SPA
-- `backend/`: Express API with SQLite persistence
+- `backend/`: compiled Go API with SQLite persistence
 - GitHub Pages hosts the frontend build output
 - Your VPS runs the backend and keeps the NVIDIA API key private
 
@@ -49,11 +49,11 @@ npm run dev:frontend
 
 ### Backend on VPS
 
-- Install Node.js 20+.
+- Install Go on the VPS.
 - Copy the `backend/` directory to the server.
 - Create `backend/.env`.
-- Run `npm install`.
-- Start with `npm run start`.
+- Build with `go build -o bin/progress-api ./cmd/server`.
+- Start with `./bin/progress-api`.
 - Put it behind Nginx or Caddy with HTTPS.
 
 ### Frontend on GitHub Pages

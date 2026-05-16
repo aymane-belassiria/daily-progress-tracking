@@ -1,0 +1,385 @@
+package app
+
+import (
+	"database/sql"
+	"fmt"
+	"math"
+	"os"
+	"path/filepath"
+
+	_ "github.com/mattn/go-sqlite3"
+)
+
+type Store struct {
+	db              *sql.DB
+	listGoalsAll    *sql.Stmt
+	listGoalsPeriod *sql.Stmt
+	getGoalByID     *sql.Stmt
+	insertGoal      *sql.Stmt
+	updateGoal      *sql.Stmt
+	deleteGoalStmt  *sql.Stmt
+	listEntriesStmt *sql.Stmt
+	getEntryByDate  *sql.Stmt
+	insertEntry     *sql.Stmt
+	updateEntry     *sql.Stmt
+}
+
+func NewStore(databasePath string) (*Store, error) {
+	if err := os.MkdirAll(filepath.Dir(databasePath), 0755); err != nil {
+		return nil, err
+	}
+
+	dsn := fmt.Sprintf("%s?_busy_timeout=5000&_journal_mode=WAL&_synchronous=NORMAL&cache=shared", databasePath)
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	db.SetMaxOpenConns(4)
+	db.SetMaxIdleConns(4)
+
+	if err := initSchema(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	store := &Store{db: db}
+	if err := store.prepare(); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return store, nil
+}
+
+func initSchema(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS goals (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			period TEXT NOT NULL CHECK(period IN ('weekly', 'monthly')),
+			title TEXT NOT NULL,
+			description TEXT DEFAULT '',
+			target_value INTEGER DEFAULT 1,
+			current_value INTEGER DEFAULT 0,
+			due_date TEXT,
+			status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'paused')),
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS entries (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			entry_date TEXT NOT NULL UNIQUE,
+			summary TEXT DEFAULT '',
+			wins TEXT DEFAULT '',
+			blockers TEXT DEFAULT '',
+			notes TEXT DEFAULT '',
+			mood TEXT DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	return err
+}
+
+func (s *Store) prepare() error {
+	var err error
+	if s.listGoalsAll, err = s.db.Prepare(`
+		SELECT id, period, title, description, target_value, current_value, due_date, status, created_at, updated_at
+		FROM goals
+		ORDER BY
+			CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,
+			due_date IS NULL,
+			due_date ASC,
+			created_at DESC
+	`); err != nil {
+		return err
+	}
+	if s.listGoalsPeriod, err = s.db.Prepare(`
+		SELECT id, period, title, description, target_value, current_value, due_date, status, created_at, updated_at
+		FROM goals
+		WHERE period = ?
+		ORDER BY due_date IS NULL, due_date ASC, created_at DESC
+	`); err != nil {
+		return err
+	}
+	if s.getGoalByID, err = s.db.Prepare(`
+		SELECT id, period, title, description, target_value, current_value, due_date, status, created_at, updated_at
+		FROM goals WHERE id = ?
+	`); err != nil {
+		return err
+	}
+	if s.insertGoal, err = s.db.Prepare(`
+		INSERT INTO goals (period, title, description, target_value, current_value, due_date, status, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`); err != nil {
+		return err
+	}
+	if s.updateGoal, err = s.db.Prepare(`
+		UPDATE goals
+		SET period = ?, title = ?, description = ?, target_value = ?, current_value = ?, due_date = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`); err != nil {
+		return err
+	}
+	if s.deleteGoalStmt, err = s.db.Prepare(`DELETE FROM goals WHERE id = ?`); err != nil {
+		return err
+	}
+	if s.listEntriesStmt, err = s.db.Prepare(`
+		SELECT id, entry_date, summary, wins, blockers, notes, mood, created_at, updated_at
+		FROM entries
+		ORDER BY entry_date DESC
+		LIMIT ?
+	`); err != nil {
+		return err
+	}
+	if s.getEntryByDate, err = s.db.Prepare(`
+		SELECT id, entry_date, summary, wins, blockers, notes, mood, created_at, updated_at
+		FROM entries WHERE entry_date = ?
+	`); err != nil {
+		return err
+	}
+	if s.insertEntry, err = s.db.Prepare(`
+		INSERT INTO entries (entry_date, summary, wins, blockers, notes, mood, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`); err != nil {
+		return err
+	}
+	if s.updateEntry, err = s.db.Prepare(`
+		UPDATE entries
+		SET summary = ?, wins = ?, blockers = ?, notes = ?, mood = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE entry_date = ?
+	`); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) Close() error {
+	statements := []*sql.Stmt{
+		s.listGoalsAll, s.listGoalsPeriod, s.getGoalByID, s.insertGoal, s.updateGoal,
+		s.deleteGoalStmt, s.listEntriesStmt, s.getEntryByDate, s.insertEntry, s.updateEntry,
+	}
+	for _, stmt := range statements {
+		if stmt != nil {
+			_ = stmt.Close()
+		}
+	}
+	return s.db.Close()
+}
+
+func (s *Store) ListGoals(period string) ([]Goal, error) {
+	var rows *sql.Rows
+	var err error
+	if period == "" {
+		rows, err = s.listGoalsAll.Query()
+	} else {
+		rows, err = s.listGoalsPeriod.Query(period)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var goals []Goal
+	for rows.Next() {
+		goal, scanErr := scanGoal(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		goals = append(goals, goal)
+	}
+	return goals, rows.Err()
+}
+
+func (s *Store) GetGoal(id int64) (*Goal, error) {
+	row := s.getGoalByID.QueryRow(id)
+	goal, err := scanGoal(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &goal, nil
+}
+
+func (s *Store) CreateGoal(input GoalInput) (*Goal, error) {
+	result, err := s.insertGoal.Exec(
+		input.Period, input.Title, input.Description, input.TargetValue,
+		input.CurrentValue, nullableStringValue(input.DueDate), input.Status,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return s.GetGoal(id)
+}
+
+func (s *Store) UpdateGoal(id int64, input GoalInput) (*Goal, error) {
+	result, err := s.updateGoal.Exec(
+		input.Period, input.Title, input.Description, input.TargetValue,
+		input.CurrentValue, nullableStringValue(input.DueDate), input.Status, id,
+	)
+	if err != nil {
+		return nil, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if affected == 0 {
+		return nil, nil
+	}
+	return s.GetGoal(id)
+}
+
+func (s *Store) DeleteGoal(id int64) error {
+	_, err := s.deleteGoalStmt.Exec(id)
+	return err
+}
+
+func (s *Store) ListEntries(limit int) ([]Entry, error) {
+	rows, err := s.listEntriesStmt.Query(limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []Entry
+	for rows.Next() {
+		entry, scanErr := scanEntry(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		entries = append(entries, entry)
+	}
+	return entries, rows.Err()
+}
+
+func (s *Store) GetEntryByDate(entryDate string) (*Entry, error) {
+	row := s.getEntryByDate.QueryRow(entryDate)
+	entry, err := scanEntry(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &entry, nil
+}
+
+func (s *Store) UpsertEntry(input EntryInput) (*Entry, error) {
+	current, err := s.GetEntryByDate(input.EntryDate)
+	if err != nil {
+		return nil, err
+	}
+
+	if current == nil {
+		if _, err := s.insertEntry.Exec(input.EntryDate, input.Summary, input.Wins, input.Blockers, input.Notes, input.Mood); err != nil {
+			return nil, err
+		}
+		return s.GetEntryByDate(input.EntryDate)
+	}
+
+	if _, err := s.updateEntry.Exec(input.Summary, input.Wins, input.Blockers, input.Notes, input.Mood, input.EntryDate); err != nil {
+		return nil, err
+	}
+	return s.GetEntryByDate(input.EntryDate)
+}
+
+func (s *Store) Dashboard() (Dashboard, error) {
+	goals, err := s.ListGoals("")
+	if err != nil {
+		return Dashboard{}, err
+	}
+	entries, err := s.ListEntries(14)
+	if err != nil {
+		return Dashboard{}, err
+	}
+
+	stats := make([]Stat, 0, 2)
+	for _, period := range []string{"weekly", "monthly"} {
+		total := 0
+		completed := 0
+		progress := 0.0
+
+		for _, goal := range goals {
+			if goal.Period != period {
+				continue
+			}
+			total++
+			if goal.Status == "completed" {
+				completed++
+			}
+			target := goal.TargetValue
+			if target < 1 {
+				target = 1
+			}
+			current := goal.CurrentValue
+			if current > target {
+				current = target
+			}
+			progress += float64(current) / float64(target)
+		}
+
+		average := 0
+		if total > 0 {
+			average = int(math.Round((progress / float64(total)) * 100))
+		}
+		stats = append(stats, Stat{
+			Period:            period,
+			Total:             total,
+			Completed:         completed,
+			AverageCompletion: average,
+		})
+	}
+
+	return Dashboard{
+		Stats:   stats,
+		Goals:   goals,
+		Entries: entries,
+	}, nil
+}
+
+type scanner interface {
+	Scan(dest ...interface{}) error
+}
+
+func scanGoal(s scanner) (Goal, error) {
+	var goal Goal
+	var dueDate sql.NullString
+	err := s.Scan(
+		&goal.ID, &goal.Period, &goal.Title, &goal.Description, &goal.TargetValue,
+		&goal.CurrentValue, &dueDate, &goal.Status, &goal.CreatedAt, &goal.UpdatedAt,
+	)
+	if err != nil {
+		return Goal{}, err
+	}
+	if dueDate.Valid {
+		goal.DueDate = &dueDate.String
+	}
+	return goal, nil
+}
+
+func scanEntry(s scanner) (Entry, error) {
+	var entry Entry
+	err := s.Scan(
+		&entry.ID, &entry.EntryDate, &entry.Summary, &entry.Wins, &entry.Blockers,
+		&entry.Notes, &entry.Mood, &entry.CreatedAt, &entry.UpdatedAt,
+	)
+	if err != nil {
+		return Entry{}, err
+	}
+	return entry, nil
+}
+
+func nullableStringValue(value *string) interface{} {
+	if value == nil || *value == "" {
+		return nil
+	}
+	return *value
+}
