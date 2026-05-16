@@ -1,4 +1,13 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+export function resolveApiBaseUrl(rawBaseUrl) {
+  const baseUrl = (rawBaseUrl || "http://localhost:4000").trim();
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+}
+
+export function toApiUrl(rawBaseUrl, path) {
+  return `${resolveApiBaseUrl(rawBaseUrl)}${path}`;
+}
+
+const API_BASE_URL = resolveApiBaseUrl(import.meta.env?.VITE_API_BASE_URL);
 const TOKEN_KEY = "progress-tracker-token";
 
 export function getStoredToken() {
@@ -16,14 +25,19 @@ export function setStoredToken(token) {
 
 async function request(path, options = {}) {
   const token = getStoredToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {})
-    }
-  });
+  let response;
+  try {
+    response = await fetch(toApiUrl(API_BASE_URL, path), {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {})
+      }
+    });
+  } catch {
+    throw new Error("Could not reach the backend API. Check VITE_API_BASE_URL, HTTPS, and backend CORS.");
+  }
 
   if (response.status === 204) {
     return null;
