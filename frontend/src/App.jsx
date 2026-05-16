@@ -22,6 +22,15 @@ const emptyEntry = {
   mood: ""
 };
 
+function normalizeDashboard(data) {
+  return {
+    ...data,
+    goals: Array.isArray(data?.goals) ? data.goals : [],
+    stats: Array.isArray(data?.stats) ? data.stats : [],
+    entries: Array.isArray(data?.entries) ? data.entries : []
+  };
+}
+
 function LoginScreen({ onLogin, error, busy }) {
   const [form, setForm] = useState({ email: "", password: "" });
 
@@ -272,7 +281,7 @@ export default function App() {
   const [error, setError] = useState("");
 
   async function loadDashboard() {
-    const data = await api.dashboard();
+    const data = normalizeDashboard(await api.dashboard());
     setDashboard(data);
 
     const todayEntry = data.entries.find((entry) => entry.entry_date === today);

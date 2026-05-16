@@ -189,6 +189,9 @@ func (s *Store) ListGoals(period string) ([]Goal, error) {
 		}
 		goals = append(goals, goal)
 	}
+	if goals == nil {
+		goals = []Goal{}
+	}
 	return goals, rows.Err()
 }
 
@@ -256,6 +259,9 @@ func (s *Store) ListEntries(limit int) ([]Entry, error) {
 			return nil, scanErr
 		}
 		entries = append(entries, entry)
+	}
+	if entries == nil {
+		entries = []Entry{}
 	}
 	return entries, rows.Err()
 }
