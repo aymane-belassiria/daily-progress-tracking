@@ -14,6 +14,9 @@ Private single-user progress tracking system with:
 - GitHub Pages hosts the frontend build output
 - Your VPS runs the backend and keeps the NVIDIA API key private
 
+For a shareable architecture and deployment flow document (including Caddy, Nginx, and `nip.io` routing), see:
+- [`docs/ARCHITECTURE_AND_FLOW.md`](docs/ARCHITECTURE_AND_FLOW.md)
+
 ## Features
 
 - Weekly and monthly goal tracking

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, getStoredToken, setStoredToken } from "./api";
+import { buildGraphLayout, buildScoreTrend, scoreLabel, taskTotals } from "./roadmap";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -29,6 +30,10 @@ function normalizeDashboard(data) {
     stats: Array.isArray(data?.stats) ? data.stats : [],
     entries: Array.isArray(data?.entries) ? data.entries : []
   };
+}
+
+function normalizeRoadmaps(data) {
+  return Array.isArray(data?.roadmaps) ? data.roadmaps : [];
 }
 
 function LoginScreen({ onLogin, error, busy }) {
@@ -266,11 +271,218 @@ function EntryList({ entries }) {
   );
 }
 
+function RoadmapGraph({ roadmap, selectedNodeId, onSelectNode }) {
+  const layout = buildGraphLayout(roadmap?.nodes || []);
+  const byDayIndex = new Map(layout.nodes.map((node) => [node.day_index, node]));
+
+  return (
+    <div className="roadmap-graph-wrap">
+      <svg className="roadmap-graph" viewBox={`0 0 ${layout.width} ${layout.height}`} role="img" aria-label="Roadmap graph">
+        {layout.edges.map((edge) => {
+          const from = byDayIndex.get(edge.from);
+          const to = byDayIndex.get(edge.to);
+          if (!from || !to) {
+            return null;
+          }
+          return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />;
+        })}
+        {layout.nodes.map((node) => {
+          const doneTasks = (node.tasks || []).filter((task) => task.done).length;
+          const totalTasks = (node.tasks || []).length || 1;
+          const isSelected = node.id === selectedNodeId;
+          return (
+            <g
+              key={node.id}
+              className={`roadmap-node ${isSelected ? "selected" : ""}`}
+              transform={`translate(${node.x}, ${node.y})`}
+              onClick={() => onSelectNode(node.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectNode(node.id);
+                }
+              }}
+              role="button"
+              tabIndex="0"
+            >
+              <circle r="30" />
+              <text y="-3">{node.day_index}</text>
+              <text y="15" className="node-progress">
+                {doneTasks}/{totalTasks}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function ScoreChart({ points }) {
+  const width = 360;
+  const height = 120;
+  const max = 100;
+  const step = points.length > 1 ? width / (points.length - 1) : width;
+  const polyline = points
+    .map((point, index) => {
+      const x = points.length > 1 ? index * step : width / 2;
+      const y = height - (Math.max(0, Math.min(max, point.value)) / max) * (height - 20) - 10;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <div className="score-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Daily progress score chart">
+        <polyline points={polyline} />
+        {points.map((point, index) => {
+          const x = points.length > 1 ? index * step : width / 2;
+          const y = height - (Math.max(0, Math.min(max, point.value)) / max) * (height - 20) - 10;
+          return <circle key={`${point.label}-${index}`} cx={x} cy={y} r="4" />;
+        })}
+      </svg>
+      <div className="chart-labels">
+        {points.map((point, index) => (
+          <span key={`${point.label}-${index}`}>{point.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RoadmapPanel({
+  goals,
+  entries,
+  roadmaps,
+  trackingPeriod,
+  selectedGoalId,
+  selectedNodeId,
+  busy,
+  onSelectPeriod,
+  onSelectGoal,
+  onSelectNode,
+  onGenerate,
+  onToggleTask
+}) {
+  const selectedGoal = goals.find((goal) => goal.id === selectedGoalId) || goals[0];
+  const roadmap = roadmaps.find((item) => item.goal_id === selectedGoal?.id && item.period === trackingPeriod);
+  const selectedNode = roadmap?.nodes.find((node) => node.id === selectedNodeId) || roadmap?.nodes[0];
+  const totals = taskTotals(roadmap);
+  const trend = buildScoreTrend(entries, roadmap);
+
+  return (
+    <section className="roadmap-lab">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Roadmap lab</p>
+          <h2>Graph plan and daily score</h2>
+        </div>
+        <div className="button-row">
+          <button
+            type="button"
+            className={trackingPeriod === "weekly" ? "" : "secondary"}
+            onClick={() => onSelectPeriod("weekly")}
+          >
+            Weekly
+          </button>
+          <button
+            type="button"
+            className={trackingPeriod === "monthly" ? "" : "secondary"}
+            onClick={() => onSelectPeriod("monthly")}
+          >
+            Monthly
+          </button>
+        </div>
+      </div>
+
+      <div className="roadmap-controls">
+        <label>
+          <span>Goal</span>
+          <select
+            value={selectedGoal?.id || ""}
+            onChange={(event) => onSelectGoal(Number(event.target.value))}
+            disabled={goals.length === 0}
+          >
+            {goals.length === 0 ? <option value="">Create a goal first</option> : null}
+            {goals.map((goal) => (
+              <option key={goal.id} value={goal.id}>
+                {goal.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" onClick={() => selectedGoal && onGenerate(selectedGoal.id)} disabled={!selectedGoal || busy}>
+          {busy ? "Generating..." : roadmap ? "Regenerate graph" : "Generate graph"}
+        </button>
+      </div>
+
+      {roadmap ? (
+        <div className="roadmap-grid">
+          <div className="roadmap-main">
+            <RoadmapGraph roadmap={roadmap} selectedNodeId={selectedNode?.id} onSelectNode={onSelectNode} />
+            <div className="task-strip">
+              <span>{totals.done}/{totals.total} daily tasks done</span>
+              <span>{roadmap.start_date} to {roadmap.end_date}</span>
+            </div>
+          </div>
+
+          <aside className="roadmap-detail">
+            <p className="eyebrow">Selected node</p>
+            <h3>{selectedNode?.title || "No node selected"}</h3>
+            <p className="muted">{selectedNode?.description || "Generate a roadmap to see the daily plan."}</p>
+            <p><strong>Success:</strong> {selectedNode?.success_criteria || "Complete the listed tasks."}</p>
+            <div className="stack">
+              {(selectedNode?.tasks || []).map((task) => (
+                <label className="task-check" key={task.id}>
+                  <input
+                    type="checkbox"
+                    checked={task.done}
+                    onChange={(event) => onToggleTask(task.id, event.target.checked)}
+                  />
+                  <span>
+                    <strong>{task.task_date}: {task.title}</strong>
+                    <small>{task.description || "No extra description."}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </aside>
+
+          <aside className="score-panel">
+            <p className="eyebrow">Daily coach score</p>
+            <div className="score-number">
+              <strong>{roadmap.score.overall}</strong>
+              <span>{scoreLabel(roadmap.score.overall)}</span>
+            </div>
+            <p className="muted">{roadmap.score.diagnosis}</p>
+            <p><strong>Next action:</strong> {roadmap.score.next_action}</p>
+            <div className="score-metrics">
+              <span>Tasks {roadmap.score.task_completion}%</span>
+              <span>Goal {roadmap.score.goal_progress}%</span>
+              <span>Entries {roadmap.score.entry_consistency}%</span>
+            </div>
+            <ScoreChart points={trend} />
+          </aside>
+        </div>
+      ) : (
+        <div className="empty-roadmap">
+          <p className="muted">Select a goal and generate a roadmap graph to decompose the description into daily tasks.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function App() {
   const [tokenReady, setTokenReady] = useState(Boolean(getStoredToken()));
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
   const [dashboard, setDashboard] = useState(null);
+  const [roadmaps, setRoadmaps] = useState([]);
+  const [trackingPeriod, setTrackingPeriod] = useState("weekly");
+  const [selectedGoalId, setSelectedGoalId] = useState(null);
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [roadmapBusy, setRoadmapBusy] = useState(false);
   const [goalForm, setGoalForm] = useState(emptyGoal);
   const [goalEditingId, setGoalEditingId] = useState(null);
   const [entryForm, setEntryForm] = useState(emptyEntry);
@@ -281,8 +493,18 @@ export default function App() {
   const [error, setError] = useState("");
 
   async function loadDashboard() {
-    const data = normalizeDashboard(await api.dashboard());
+    const [dashboardData, roadmapData] = await Promise.all([api.dashboard(), api.roadmaps()]);
+    const data = normalizeDashboard(dashboardData);
     setDashboard(data);
+    const nextRoadmaps = normalizeRoadmaps(roadmapData);
+    setRoadmaps(nextRoadmaps);
+
+    if (!selectedGoalId && data.goals.length > 0) {
+      setSelectedGoalId(data.goals[0].id);
+    }
+    if (!selectedNodeId && nextRoadmaps[0]?.nodes?.length > 0) {
+      setSelectedNodeId(nextRoadmaps[0].nodes[0].id);
+    }
 
     const todayEntry = data.entries.find((entry) => entry.entry_date === today);
     if (todayEntry) {
@@ -391,6 +613,44 @@ export default function App() {
     }
   }
 
+  async function handleGenerateRoadmapGraph(goalId) {
+    setMessage("");
+    setError("");
+    setRoadmapBusy(true);
+
+    try {
+      const data = await api.generateRoadmapGraph({
+        goal_id: goalId,
+        period: trackingPeriod,
+        start_date: today
+      });
+      const roadmap = data.roadmap;
+      setRoadmaps((current) => [
+        roadmap,
+        ...current.filter((item) => !(item.goal_id === roadmap.goal_id && item.period === roadmap.period))
+      ]);
+      setSelectedNodeId(roadmap.nodes?.[0]?.id || null);
+      setMessage("Roadmap graph generated.");
+    } catch (nextError) {
+      setError(nextError.message);
+    } finally {
+      setRoadmapBusy(false);
+    }
+  }
+
+  async function handleToggleRoadmapTask(taskId, done) {
+    setMessage("");
+    setError("");
+
+    try {
+      const data = await api.updateRoadmapTask(taskId, done);
+      const roadmap = data.roadmap;
+      setRoadmaps((current) => current.map((item) => (item.id === roadmap.id ? roadmap : item)));
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }
+
   function logout() {
     setStoredToken("");
     setTokenReady(false);
@@ -445,6 +705,27 @@ export default function App() {
 
       {message ? <p className="message">{message}</p> : null}
       {error ? <p className="error">{error}</p> : null}
+
+      <RoadmapPanel
+        goals={dashboard.goals}
+        entries={dashboard.entries}
+        roadmaps={roadmaps}
+        trackingPeriod={trackingPeriod}
+        selectedGoalId={selectedGoalId}
+        selectedNodeId={selectedNodeId}
+        busy={roadmapBusy}
+        onSelectPeriod={(period) => {
+          setTrackingPeriod(period);
+          setSelectedNodeId(null);
+        }}
+        onSelectGoal={(goalId) => {
+          setSelectedGoalId(goalId);
+          setSelectedNodeId(null);
+        }}
+        onSelectNode={setSelectedNodeId}
+        onGenerate={handleGenerateRoadmapGraph}
+        onToggleTask={handleToggleRoadmapTask}
+      />
 
       <section className="layout-grid">
         <div className="stack">

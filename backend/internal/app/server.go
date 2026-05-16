@@ -35,6 +35,9 @@ func NewServer(cfg Config, store *Store) *http.Server {
 	mux.HandleFunc("/api/goals", server.withAuth(server.handleGoals))
 	mux.HandleFunc("/api/goals/", server.withAuth(server.handleGoalByID))
 	mux.HandleFunc("/api/entries", server.withAuth(server.handleEntries))
+	mux.HandleFunc("/api/roadmaps", server.withAuth(server.handleRoadmaps))
+	mux.HandleFunc("/api/roadmaps/generate", server.withAuth(server.handleGenerateRoadmapGraph))
+	mux.HandleFunc("/api/roadmap-tasks/", server.withAuth(server.handleRoadmapTaskByID))
 	mux.HandleFunc("/api/ai/roadmap", server.withAuth(server.handleRoadmap))
 	mux.HandleFunc("/api/ai/hints", server.withAuth(server.handleHints))
 
@@ -285,6 +288,96 @@ func (s *Server) handleEntries(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleRoadmaps(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	roadmaps, err := s.store.ListRoadmaps()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not load roadmaps."})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"roadmaps": roadmaps})
+}
+
+func (s *Server) handleGenerateRoadmapGraph(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+
+	var req RoadmapGenerateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid roadmap request."})
+		return
+	}
+	if err := validateRoadmapGenerate(req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid roadmap request.", "details": err.Error()})
+		return
+	}
+
+	goal, err := s.store.GetGoal(req.GoalID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not load goal."})
+		return
+	}
+	if goal == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Goal not found."})
+		return
+	}
+
+	input := fallbackRoadmapInput(*goal, req.Period, req.StartDate)
+	if s.ai != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 50*time.Second)
+		defer cancel()
+		content, err := s.ai.generate(
+			ctx,
+			"You produce strict JSON roadmap graphs for a private progress tracker.",
+			structuredRoadmapPrompt(*goal, req.Period, req.StartDate),
+		)
+		if err == nil {
+			input = parseRoadmapInput(*goal, req.Period, req.StartDate, content)
+		}
+	}
+
+	roadmap, err := s.store.SaveRoadmap(input)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not save roadmap."})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"roadmap": roadmap})
+}
+
+func (s *Server) handleRoadmapTaskByID(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDFromPath(r.URL.Path, "/api/roadmap-tasks/")
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Roadmap task not found."})
+		return
+	}
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w)
+		return
+	}
+
+	var req RoadmapTaskUpdateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid task payload."})
+		return
+	}
+
+	roadmap, err := s.store.SetRoadmapTaskDone(id, req.Done)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not update roadmap task."})
+		return
+	}
+	if roadmap == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Roadmap task not found."})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"roadmap": roadmap})
+}
+
 func (s *Server) handleRoadmap(w http.ResponseWriter, r *http.Request) {
 	s.handleAI(w, r, "You create realistic execution roadmaps for one private user.", func(d Dashboard, prompt string) string {
 		return roadmapPrompt(d.Goals, d.Entries, prompt)
@@ -416,6 +509,19 @@ func validateEntry(input EntryInput) error {
 	}
 	if len(input.Mood) > 80 {
 		return errors.New("mood must be at most 80 characters")
+	}
+	return nil
+}
+
+func validateRoadmapGenerate(input RoadmapGenerateRequest) error {
+	if input.GoalID <= 0 {
+		return errors.New("goal_id is required")
+	}
+	if input.Period != "weekly" && input.Period != "monthly" {
+		return errors.New("period must be weekly or monthly")
+	}
+	if len(input.StartDate) != 10 {
+		return errors.New("start_date must be in YYYY-MM-DD format")
 	}
 	return nil
 }

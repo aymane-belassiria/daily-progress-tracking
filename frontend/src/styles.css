@@ -41,6 +41,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 button.secondary {
   background: rgba(244, 239, 229, 0.08);
   color: #f4efe5;
@@ -225,6 +230,181 @@ label span {
   flex-wrap: wrap;
 }
 
+.section-heading,
+.roadmap-controls,
+.task-strip,
+.score-metrics,
+.chart-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.section-heading h2 {
+  margin: 0.25rem 0 0;
+  font-size: clamp(1.35rem, 3vw, 2.2rem);
+}
+
+.roadmap-lab {
+  margin-bottom: 1rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(244, 239, 229, 0.08);
+  border-radius: 28px;
+  background: rgba(19, 21, 21, 0.62);
+  backdrop-filter: blur(18px);
+}
+
+.roadmap-controls {
+  margin: 1rem 0;
+  align-items: end;
+}
+
+.roadmap-controls label {
+  flex: 1;
+}
+
+.roadmap-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr) minmax(260px, 0.7fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.roadmap-main,
+.roadmap-detail,
+.score-panel,
+.empty-roadmap {
+  border: 1px solid rgba(244, 239, 229, 0.08);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1rem;
+}
+
+.roadmap-graph-wrap {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.roadmap-graph {
+  min-width: 620px;
+  width: 100%;
+}
+
+.roadmap-graph line {
+  stroke: rgba(244, 239, 229, 0.22);
+  stroke-width: 2;
+}
+
+.roadmap-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.roadmap-node circle {
+  fill: rgba(129, 178, 154, 0.22);
+  stroke: rgba(129, 178, 154, 0.85);
+  stroke-width: 2;
+}
+
+.roadmap-node.selected circle,
+.roadmap-node:focus-visible circle {
+  fill: rgba(224, 122, 95, 0.32);
+  stroke: #e07a5f;
+  stroke-width: 3;
+}
+
+.roadmap-node text {
+  fill: #f4efe5;
+  text-anchor: middle;
+  font-size: 0.95rem;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.roadmap-node .node-progress {
+  fill: #c7bfb0;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.task-strip,
+.score-metrics,
+.chart-labels {
+  color: #c7bfb0;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.roadmap-detail h3 {
+  margin: 0.35rem 0 0.5rem;
+}
+
+.task-check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.task-check input {
+  width: auto;
+  margin-top: 0.25rem;
+  accent-color: #81b29a;
+}
+
+.task-check span {
+  color: #f4efe5;
+}
+
+.task-check small {
+  display: block;
+  color: #c7bfb0;
+  margin-top: 0.2rem;
+}
+
+.score-number {
+  display: flex;
+  align-items: end;
+  gap: 0.8rem;
+}
+
+.score-number strong {
+  font-size: 3.2rem;
+  line-height: 1;
+}
+
+.score-number span {
+  color: #81b29a;
+  font-weight: 800;
+  margin-bottom: 0.35rem;
+}
+
+.score-chart {
+  margin-top: 1rem;
+}
+
+.score-chart svg {
+  width: 100%;
+  min-height: 120px;
+}
+
+.score-chart polyline {
+  fill: none;
+  stroke: #f2cc8f;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.score-chart circle {
+  fill: #e07a5f;
+}
+
 .message {
   color: #9fd6ba;
 }
@@ -246,11 +426,45 @@ label span {
   .stats-grid,
   .layout-grid,
   .split-panel,
-  .inline-grid {
+  .inline-grid,
+  .roadmap-grid {
     grid-template-columns: 1fr;
   }
 
   .hero {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    width: min(100% - 1rem, 1240px);
+    padding: 1rem 0 2rem;
+  }
+
+  .auth-card,
+  .card,
+  .roadmap-lab {
+    border-radius: 20px;
+    padding: 1rem;
+  }
+
+  .hero h1,
+  .auth-card h1 {
+    font-size: 2.4rem;
+  }
+
+  .section-heading,
+  .roadmap-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .roadmap-graph {
+    min-width: 520px;
+  }
+
+  button {
+    width: 100%;
   }
 }

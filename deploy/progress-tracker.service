@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily Progress Tracker API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/aymane/daily-progress-tracking/backend
+ExecStart=/home/aymane/daily-progress-tracking/backend/bin/progress-api
+Restart=always
+RestartSec=5
+User=root
+EnvironmentFile=/home/aymane/daily-progress-tracking/backend/.env
+
+[Install]
+WantedBy=multi-user.target

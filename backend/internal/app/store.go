@@ -78,6 +78,39 @@ func initSchema(db *sql.DB) error {
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
+
+		CREATE TABLE IF NOT EXISTS roadmaps (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			goal_id INTEGER NOT NULL,
+			period TEXT NOT NULL CHECK(period IN ('weekly', 'monthly')),
+			start_date TEXT NOT NULL,
+			end_date TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+		);
+
+		CREATE TABLE IF NOT EXISTS roadmap_nodes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			roadmap_id INTEGER NOT NULL,
+			sequence INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			description TEXT DEFAULT '',
+			day_index INTEGER NOT NULL,
+			depends_on TEXT NOT NULL DEFAULT '[]',
+			success_criteria TEXT DEFAULT '',
+			FOREIGN KEY(roadmap_id) REFERENCES roadmaps(id) ON DELETE CASCADE
+		);
+
+		CREATE TABLE IF NOT EXISTS roadmap_tasks (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			node_id INTEGER NOT NULL,
+			task_date TEXT NOT NULL,
+			title TEXT NOT NULL,
+			description TEXT DEFAULT '',
+			done INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(node_id) REFERENCES roadmap_nodes(id) ON DELETE CASCADE
+		);
 	`)
 	return err
 }

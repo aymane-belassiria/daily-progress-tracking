@@ -64,6 +64,21 @@ export const api = {
   dashboard() {
     return request("/api/dashboard");
   },
+  roadmaps() {
+    return request("/api/roadmaps");
+  },
+  generateRoadmapGraph(payload) {
+    return request("/api/roadmaps/generate", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  updateRoadmapTask(id, done) {
+    return request(`/api/roadmap-tasks/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ done })
+    });
+  },
   saveGoal(payload, id) {
     return request(id ? `/api/goals/${id}` : "/api/goals", {
       method: id ? "PUT" : "POST",
