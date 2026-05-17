@@ -527,6 +527,20 @@ label span {
   color: #c7bfb0;
 }
 
+.section-label {
+  margin-bottom: 0.75rem;
+}
+
+.two-col-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-submit-row {
+  display: flex;
+}
+
 @media (max-width: 960px) {
   .stats-grid,
   .layout-grid,

@@ -160,7 +160,9 @@ function GoalForm({ goal, onChange, onSubmit, submitLabel }) {
           />
         </label>
       </div>
-      <button type="submit">{submitLabel}</button>
+      <div className="form-submit-row">
+        <button type="submit">{submitLabel}</button>
+      </div>
     </form>
   );
 }
@@ -174,7 +176,7 @@ function EntryForm({ entry, onChange, onSubmit }) {
         onSubmit();
       }}
     >
-      <div className="inline-grid">
+      <div className="two-col-grid">
         <label>
           <span>Date</span>
           <input
@@ -877,7 +879,7 @@ export default function App() {
 
           <div className="split-panel">
             <div>
-              <p className="eyebrow">Weekly goals</p>
+              <p className="eyebrow section-label">Weekly goals</p>
               <GoalList
                 goals={weekly}
                 onEdit={(goal) => {
@@ -891,7 +893,7 @@ export default function App() {
               />
             </div>
             <div>
-              <p className="eyebrow">Monthly goals</p>
+              <p className="eyebrow section-label">Monthly goals</p>
               <GoalList
                 goals={monthly}
                 onEdit={(goal) => {
@@ -929,7 +931,7 @@ export default function App() {
           </div>
 
           <div>
-            <p className="eyebrow">Recent entries</p>
+            <p className="eyebrow section-label">Recent entries</p>
             <EntryList entries={dashboard.entries} />
           </div>
         </div>
