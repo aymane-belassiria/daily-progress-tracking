@@ -285,6 +285,7 @@ function RoadmapGraph({ roadmap, selectedNodeId, onSelectNode }) {
           type="button"
           className="secondary zoom-btn"
           onClick={() => setZoom((z) => Math.max(0.5, parseFloat((z - 0.25).toFixed(2))))}
+          disabled={zoom <= 0.5}
           aria-label="Zoom out"
         >
           −
@@ -294,6 +295,7 @@ function RoadmapGraph({ roadmap, selectedNodeId, onSelectNode }) {
           type="button"
           className="secondary zoom-btn"
           onClick={() => setZoom((z) => Math.min(3, parseFloat((z + 0.25).toFixed(2))))}
+          disabled={zoom >= 3}
           aria-label="Zoom in"
         >
           +
