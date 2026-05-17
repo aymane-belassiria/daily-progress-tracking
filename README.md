@@ -5,7 +5,7 @@ Private single-user progress tracking system with:
 - React frontend intended for GitHub Pages
 - Go + SQLite backend intended for a VPS
 - JWT auth for one private account
-- NVIDIA-hosted Qwen integration for roadmap generation and progress hints
+- OLLAMA-hosted Qwen integration for roadmap generation and progress hints
 
 ## Architecture
 
