@@ -31,7 +31,7 @@ func LoadConfig(envPath string) (Config, error) {
 		FrontendOrigin: envOrDefault("FRONTEND_ORIGIN", "*"),
 		OllamaAPIKey:   os.Getenv("OLLAMA_API_KEY"),
 		OllamaModel:    envOrDefault("OLLAMA_MODEL", "qwen3-coder:480b-cloud"),
-		OllamaBaseURL:  envOrDefault("OLLAMA_BASE_URL", "https://api.ollama.com/v1/chat/completions"),
+		OllamaBaseURL:  envOrDefault("OLLAMA_BASE_URL", "https://ollama.com/v1/chat/completions"),
 		DatabasePath:   filepath.Join("data", "progress.db"),
 	}
 
