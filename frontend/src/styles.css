@@ -546,6 +546,7 @@ label span {
   .layout-grid,
   .split-panel,
   .inline-grid,
+  .two-col-grid,
   .roadmap-grid {
     grid-template-columns: 1fr;
   }
