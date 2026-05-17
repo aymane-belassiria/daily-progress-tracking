@@ -169,7 +169,7 @@ func (s *Server) handleGoals(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		period := r.URL.Query().Get("period")
-		if period != "" && period != "weekly" && period != "monthly" {
+		if period != "" && len(period) > 32 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid period."})
 			return
 		}
@@ -509,8 +509,8 @@ func validEmail(email string) bool {
 }
 
 func validateGoal(input GoalInput) error {
-	if input.Period != "weekly" && input.Period != "monthly" {
-		return errors.New("period must be weekly or monthly")
+	if strings.TrimSpace(input.Period) == "" || len(input.Period) > 32 {
+		return errors.New("period must be a non-empty string of at most 32 characters")
 	}
 	if strings.TrimSpace(input.Title) == "" || len(input.Title) > 160 {
 		return errors.New("title is required and must be at most 160 characters")
@@ -560,8 +560,8 @@ func validateRoadmapGenerate(input RoadmapGenerateRequest) error {
 	if input.GoalID <= 0 {
 		return errors.New("goal_id is required")
 	}
-	if input.Period != "weekly" && input.Period != "monthly" {
-		return errors.New("period must be weekly or monthly")
+	if strings.TrimSpace(input.Period) == "" || len(input.Period) > 32 {
+		return errors.New("period must be a non-empty string of at most 32 characters")
 	}
 	if len(input.StartDate) != 10 {
 		return errors.New("start_date must be in YYYY-MM-DD format")

@@ -105,8 +105,13 @@ function GoalForm({ goal, onChange, onSubmit, submitLabel }) {
         <label>
           <span>Period</span>
           <select value={goal.period} onChange={(event) => onChange({ ...goal, period: event.target.value })}>
+            <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
+            <option value="2-weeks">2 Weeks</option>
             <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly (3 months)</option>
+            <option value="6-months">6 Months</option>
+            <option value="yearly">Yearly</option>
           </select>
         </label>
         <label>
@@ -827,8 +832,11 @@ export default function App() {
 
   const weekly = dashboard.goals.filter((goal) => goal.period === "weekly");
   const monthly = dashboard.goals.filter((goal) => goal.period === "monthly");
-  const weeklyStats = dashboard.stats.find((item) => item.period === "weekly");
-  const monthlyStats = dashboard.stats.find((item) => item.period === "monthly");
+  const entryCount = dashboard.entries.length;
+  const nonEmptyStats = dashboard.stats.filter((s) => s.total > 0);
+  const displayStats = nonEmptyStats.length > 0
+    ? nonEmptyStats.slice(0, 2)
+    : dashboard.stats.filter((s) => s.period === "weekly" || s.period === "monthly");
 
   return (
     <div className="shell">
@@ -852,17 +860,15 @@ export default function App() {
       </header>
 
       <section className="stats-grid">
-        <StatCard
-          label="Weekly"
-          value={`${weeklyStats?.averageCompletion || 0}%`}
-          subvalue={`${weeklyStats?.completed || 0}/${weeklyStats?.total || 0} completed`}
-        />
-        <StatCard
-          label="Monthly"
-          value={`${monthlyStats?.averageCompletion || 0}%`}
-          subvalue={`${monthlyStats?.completed || 0}/${monthlyStats?.total || 0} completed`}
-        />
-        <StatCard label="Entries" value={dashboard.entries.length} subvalue="Recent daily logs" />
+        {displayStats.map((stat) => (
+          <StatCard
+            key={stat.period}
+            label={stat.period.charAt(0).toUpperCase() + stat.period.slice(1)}
+            value={`${stat.averageCompletion}%`}
+            subvalue={`${stat.completed}/${stat.total} completed`}
+          />
+        ))}
+        <StatCard label="Entries" value={entryCount} subvalue="Recent daily logs" />
       </section>
 
       {message ? <p className="message">{message}</p> : null}

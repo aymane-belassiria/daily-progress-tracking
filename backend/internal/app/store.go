@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -39,6 +40,10 @@ func NewStore(databasePath string) (*Store, error) {
 	db.SetMaxIdleConns(4)
 
 	if err := initSchema(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := runMigrations(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -340,8 +345,23 @@ func (s *Store) Dashboard() (Dashboard, error) {
 		return Dashboard{}, err
 	}
 
-	stats := make([]Stat, 0, 2)
-	for _, period := range []string{"weekly", "monthly"} {
+	// Collect unique periods from goals
+	periodSet := make(map[string]struct{})
+	for _, goal := range goals {
+		periodSet[goal.Period] = struct{}{}
+	}
+	// Always show weekly and monthly even if no goals exist for them
+	for _, p := range []string{"weekly", "monthly"} {
+		periodSet[p] = struct{}{}
+	}
+	periods := make([]string, 0, len(periodSet))
+	for p := range periodSet {
+		periods = append(periods, p)
+	}
+	sort.Strings(periods)
+
+	stats := make([]Stat, 0, len(periods))
+	for _, period := range periods {
 		total := 0
 		completed := 0
 		progress := 0.0
@@ -421,4 +441,73 @@ func nullableStringValue(value *string) interface{} {
 		return nil
 	}
 	return *value
+}
+
+func runMigrations(db *sql.DB) error {
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY)`); err != nil {
+		return err
+	}
+	if !migrationDone(db, "001_flexible_period") {
+		if err := migration001FlexiblePeriod(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`INSERT INTO schema_migrations (id) VALUES (?)`, "001_flexible_period"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrationDone(db *sql.DB, id string) bool {
+	var n int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE id = ?`, id).Scan(&n)
+	return n > 0
+}
+
+func migration001FlexiblePeriod(db *sql.DB) error {
+	steps := []string{
+		`PRAGMA foreign_keys = OFF`,
+		`CREATE TABLE goals_v2 (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			period TEXT NOT NULL,
+			title TEXT NOT NULL,
+			description TEXT DEFAULT '',
+			target_value INTEGER DEFAULT 1,
+			current_value INTEGER DEFAULT 0,
+			due_date TEXT,
+			status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'paused')),
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`INSERT INTO goals_v2 SELECT id, period, title, description, target_value, current_value, due_date, status, created_at, updated_at FROM goals`,
+		`DROP TABLE goals`,
+		`ALTER TABLE goals_v2 RENAME TO goals`,
+		`CREATE TABLE roadmaps_v2 (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			goal_id INTEGER NOT NULL,
+			period TEXT NOT NULL,
+			start_date TEXT NOT NULL,
+			end_date TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+		)`,
+		`INSERT INTO roadmaps_v2 SELECT id, goal_id, period, start_date, end_date, created_at, updated_at FROM roadmaps`,
+		`DROP TABLE roadmaps`,
+		`ALTER TABLE roadmaps_v2 RENAME TO roadmaps`,
+		`PRAGMA foreign_keys = ON`,
+	}
+	for _, stmt := range steps {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("migration001 failed at %q: %w", stmt[:min(40, len(stmt))], err)
+		}
+	}
+	return nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
