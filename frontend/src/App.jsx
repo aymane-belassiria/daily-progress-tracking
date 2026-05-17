@@ -473,6 +473,84 @@ function RoadmapPanel({
   );
 }
 
+function HelpModal({ onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>How to use this app</h2>
+          <button type="button" className="modal-close secondary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="modal-body stack">
+          <div>
+            <p className="eyebrow">Goals</p>
+            <p>Create <strong>weekly</strong> or <strong>monthly</strong> goals with a target value and optional due date. Track progress by updating the current value as you advance.</p>
+          </div>
+          <div>
+            <p className="eyebrow">Daily entries</p>
+            <p>Log each day with a <strong>summary</strong>, <strong>wins</strong>, <strong>blockers</strong>, and notes. If you enter blockers, the AI will automatically analyze them and suggest adaptations to your roadmap.</p>
+          </div>
+          <div>
+            <p className="eyebrow">Roadmap lab</p>
+            <p>Select a goal and click <strong>Generate graph</strong> to get an AI-decomposed daily task plan. Click any node to see tasks for that day. Check off tasks as you complete them.</p>
+          </div>
+          <div>
+            <p className="eyebrow">AI guidance</p>
+            <p>Use the <strong>Generate roadmap</strong> and <strong>Generate hints</strong> buttons for free-form AI coaching based on your current goals and past entries.</p>
+          </div>
+          <div>
+            <p className="eyebrow">Adaptive reasoning</p>
+            <p>When you save a daily entry with blockers, the AI automatically detects obstacles and proposes enhancements. You can <strong>apply the enhancement</strong> (regenerate your roadmap with adapted context) or <strong>keep existing tasks</strong>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdaptationPanel({ adaptation, adaptBusy, selectedGoalId, trackingPeriod, onApply, onDismiss }) {
+  if (adaptBusy) {
+    return (
+      <div className="adapt-panel adapt-busy">
+        <p className="eyebrow">Reasoning</p>
+        <p className="muted">Analyzing your blockers and generating an adaptive enhancement...</p>
+      </div>
+    );
+  }
+  if (!adaptation) return null;
+
+  return (
+    <div className="adapt-panel">
+      <div className="adapt-header">
+        <div>
+          <p className="eyebrow">Adaptive reasoning</p>
+          <h3>Enhancement detected</h3>
+        </div>
+        <button type="button" className="secondary" onClick={onDismiss}>
+          Keep existing tasks
+        </button>
+      </div>
+      <p className="adapt-analysis">{adaptation.analysis}</p>
+      {adaptation.suggestions.length > 0 && (
+        <ul className="adapt-suggestions">
+          {adaptation.suggestions.map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ul>
+      )}
+      <div className="adapt-enhancement">
+        <p className="eyebrow">Proposed adaptation</p>
+        <p>{adaptation.enhancement}</p>
+      </div>
+      <button type="button" onClick={onApply} disabled={!selectedGoalId}>
+        Apply enhancement (regenerate roadmap)
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [tokenReady, setTokenReady] = useState(Boolean(getStoredToken()));
   const [authBusy, setAuthBusy] = useState(false);
@@ -491,6 +569,9 @@ export default function App() {
   const [hints, setHints] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [showHelp, setShowHelp] = useState(false);
+  const [adaptation, setAdaptation] = useState(null);
+  const [adaptBusy, setAdaptBusy] = useState(false);
 
   async function loadDashboard() {
     const [dashboardData, roadmapData] = await Promise.all([api.dashboard(), api.roadmaps()]);
@@ -584,6 +665,23 @@ export default function App() {
       await api.saveEntry(entryForm);
       setMessage("Daily entry saved.");
       await loadDashboard();
+
+      if (entryForm.blockers?.trim()) {
+        setAdaptation(null);
+        setAdaptBusy(true);
+        try {
+          const result = await api.adapt({
+            entry_date: entryForm.entry_date,
+            blockers: entryForm.blockers,
+            summary: entryForm.summary
+          });
+          setAdaptation(result);
+        } catch {
+          // adaptation is best-effort
+        } finally {
+          setAdaptBusy(false);
+        }
+      }
     } catch (nextError) {
       setError(nextError.message);
     }
@@ -651,6 +749,32 @@ export default function App() {
     }
   }
 
+  async function handleApplyAdaptation() {
+    if (!selectedGoalId) return;
+    setAdaptation(null);
+    setMessage("Applying enhancement — regenerating roadmap...");
+    setRoadmapBusy(true);
+    setError("");
+    try {
+      const data = await api.generateRoadmapGraph({
+        goal_id: selectedGoalId,
+        period: trackingPeriod,
+        start_date: today
+      });
+      const newRoadmap = data.roadmap;
+      setRoadmaps((current) => [
+        newRoadmap,
+        ...current.filter((item) => !(item.goal_id === newRoadmap.goal_id && item.period === newRoadmap.period))
+      ]);
+      setSelectedNodeId(newRoadmap.nodes?.[0]?.id || null);
+      setMessage("Enhancement applied — roadmap regenerated.");
+    } catch (nextError) {
+      setError(nextError.message);
+    } finally {
+      setRoadmapBusy(false);
+    }
+  }
+
   function logout() {
     setStoredToken("");
     setTokenReady(false);
@@ -676,17 +800,23 @@ export default function App() {
 
   return (
     <div className="shell">
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       <header className="hero">
         <div>
           <p className="eyebrow">Daily progress tracking</p>
           <h1>Execution dashboard</h1>
           <p className="muted">
-            Weekly and monthly goals, daily notes, and Qwen-generated guidance routed through your private backend.
+            Weekly and monthly goals, daily notes, and Qwen-powered adaptive guidance routed through your private backend.
           </p>
         </div>
-        <button type="button" className="secondary" onClick={logout}>
-          Log out
-        </button>
+        <div className="button-row">
+          <button type="button" className="help-btn secondary" onClick={() => setShowHelp(true)} title="How to use this app">
+            ?
+          </button>
+          <button type="button" className="secondary" onClick={logout}>
+            Log out
+          </button>
+        </div>
       </header>
 
       <section className="stats-grid">
@@ -705,6 +835,15 @@ export default function App() {
 
       {message ? <p className="message">{message}</p> : null}
       {error ? <p className="error">{error}</p> : null}
+
+      <AdaptationPanel
+        adaptation={adaptation}
+        adaptBusy={adaptBusy}
+        selectedGoalId={selectedGoalId}
+        trackingPeriod={trackingPeriod}
+        onApply={handleApplyAdaptation}
+        onDismiss={() => setAdaptation(null)}
+      />
 
       <RoadmapPanel
         goals={dashboard.goals}

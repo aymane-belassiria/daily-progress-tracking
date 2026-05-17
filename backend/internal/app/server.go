@@ -15,7 +15,7 @@ import (
 type Server struct {
 	config *Config
 	store  *Store
-	ai     *nvidiaClient
+	ai     *aiClient
 }
 
 func NewServer(cfg Config, store *Store) *http.Server {
@@ -23,8 +23,8 @@ func NewServer(cfg Config, store *Store) *http.Server {
 		config: &cfg,
 		store:  store,
 	}
-	if cfg.NVIDIAAPIKey != "" {
-		server.ai = newNVIDIAClient(cfg.NVIDIAAPIKey, cfg.NVIDIAModel)
+	if cfg.OllamaAPIKey != "" {
+		server.ai = newAIClient(cfg.OllamaAPIKey, cfg.OllamaModel, cfg.OllamaBaseURL)
 	}
 
 	mux := http.NewServeMux()
@@ -40,6 +40,7 @@ func NewServer(cfg Config, store *Store) *http.Server {
 	mux.HandleFunc("/api/roadmap-tasks/", server.withAuth(server.handleRoadmapTaskByID))
 	mux.HandleFunc("/api/ai/roadmap", server.withAuth(server.handleRoadmap))
 	mux.HandleFunc("/api/ai/hints", server.withAuth(server.handleHints))
+	mux.HandleFunc("/api/ai/adapt", server.withAuth(server.handleAdapt))
 
 	return &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -390,13 +391,55 @@ func (s *Server) handleHints(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleAdapt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	if s.ai == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "OLLAMA_API_KEY is not configured."})
+		return
+	}
+
+	var req AdaptRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid adapt request payload."})
+		return
+	}
+	if len(req.Blockers) > 2000 || len(req.Summary) > 2000 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid adapt request payload."})
+		return
+	}
+
+	dashboard, err := s.store.Dashboard()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not load dashboard."})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 50*time.Second)
+	defer cancel()
+
+	content, err := s.ai.generate(ctx,
+		"You are an adaptive execution coach. You analyze blockers and propose concrete adaptations to goals and roadmaps.",
+		adaptPrompt(dashboard.Goals, dashboard.Entries, req.Blockers, req.Summary),
+	)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	suggestion := parseAdaptSuggestion(content)
+	writeJSON(w, http.StatusOK, suggestion)
+}
+
 func (s *Server) handleAI(w http.ResponseWriter, r *http.Request, system string, buildPrompt func(Dashboard, string) string) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w)
 		return
 	}
 	if s.ai == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "NVIDIA_API_KEY is not configured."})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "OLLAMA_API_KEY is not configured."})
 		return
 	}
 

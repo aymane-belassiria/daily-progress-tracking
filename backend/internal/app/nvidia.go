@@ -10,25 +10,30 @@ import (
 	"time"
 )
 
-const nvidiaURL = "https://integrate.api.nvidia.com/v1/chat/completions"
+const ollamaCloudURL = "https://api.ollama.com/v1/chat/completions"
 
-type nvidiaClient struct {
+type aiClient struct {
 	httpClient *http.Client
 	apiKey     string
 	model      string
+	baseURL    string
 }
 
-func newNVIDIAClient(apiKey, model string) *nvidiaClient {
-	return &nvidiaClient{
-		apiKey: apiKey,
-		model:  model,
+func newAIClient(apiKey, model, baseURL string) *aiClient {
+	if baseURL == "" {
+		baseURL = ollamaCloudURL
+	}
+	return &aiClient{
+		apiKey:  apiKey,
+		model:   model,
+		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 45 * time.Second,
 		},
 	}
 }
 
-func (c *nvidiaClient) generate(ctx context.Context, system, prompt string) (string, error) {
+func (c *aiClient) generate(ctx context.Context, system, prompt string) (string, error) {
 	payload := map[string]interface{}{
 		"model": c.model,
 		"messages": []map[string]string{
@@ -46,7 +51,7 @@ func (c *nvidiaClient) generate(ctx context.Context, system, prompt string) (str
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, nvidiaURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -64,7 +69,7 @@ func (c *nvidiaClient) generate(ctx context.Context, system, prompt string) (str
 		return "", err
 	}
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("NVIDIA API error %d: %s", resp.StatusCode, string(raw))
+		return "", fmt.Errorf("AI API error %d: %s", resp.StatusCode, string(raw))
 	}
 
 	var parsed struct {

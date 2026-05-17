@@ -215,6 +215,55 @@ func fallbackTaskDescription(goal Goal) string {
 	return "Do one concrete task that makes the goal easier to finish."
 }
 
+func adaptPrompt(goals []Goal, entries []Entry, blockers, summary string) string {
+	return fmt.Sprintf(`You are an adaptive execution coach.
+
+The user encountered real-life blockers. Analyze the situation and propose concrete adaptations.
+
+Return strict JSON only. Do not wrap in markdown.
+
+Schema:
+{
+  "analysis": "2-3 sentence root-cause analysis of the blockers",
+  "suggestions": ["concrete action 1", "concrete action 2", "concrete action 3"],
+  "enhancement": "one paragraph describing exactly how to adapt the roadmap or goals to overcome these obstacles and stay on track"
+}
+
+Current goals:
+%s
+
+Recent entries (last 5):
+%s
+
+Today's blockers:
+%s
+
+Today's summary:
+%s`, mustJSON(goals), mustJSON(entries), fallbackText(blockers), fallbackText(summary))
+}
+
+func parseAdaptSuggestion(raw string) AdaptSuggestion {
+	raw = strings.TrimSpace(raw)
+	// strip optional markdown code fences
+	if idx := strings.Index(raw, "{"); idx > 0 {
+		raw = raw[idx:]
+	}
+	if idx := strings.LastIndex(raw, "}"); idx >= 0 && idx < len(raw)-1 {
+		raw = raw[:idx+1]
+	}
+
+	var out AdaptSuggestion
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		out.Analysis = raw
+		out.Suggestions = []string{}
+		out.Enhancement = "See analysis above for suggested adaptations."
+	}
+	if out.Suggestions == nil {
+		out.Suggestions = []string{}
+	}
+	return out
+}
+
 func mustJSON(value interface{}) string {
 	raw, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {

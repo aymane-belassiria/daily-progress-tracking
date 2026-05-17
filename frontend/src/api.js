@@ -105,5 +105,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ prompt })
     });
+  },
+  adapt(payload) {
+    return request("/api/ai/adapt", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
   }
 };

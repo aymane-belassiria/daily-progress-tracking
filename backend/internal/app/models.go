@@ -140,3 +140,15 @@ type RoadmapGenerateRequest struct {
 type RoadmapTaskUpdateRequest struct {
 	Done bool `json:"done"`
 }
+
+type AdaptRequest struct {
+	EntryDate string `json:"entry_date"`
+	Blockers  string `json:"blockers"`
+	Summary   string `json:"summary"`
+}
+
+type AdaptSuggestion struct {
+	Analysis    string   `json:"analysis"`
+	Suggestions []string `json:"suggestions"`
+	Enhancement string   `json:"enhancement"`
+}

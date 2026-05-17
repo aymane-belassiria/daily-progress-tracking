@@ -14,8 +14,9 @@ type Config struct {
 	AdminEmail     string
 	AdminPassword  string
 	FrontendOrigin string
-	NVIDIAAPIKey   string
-	NVIDIAModel    string
+	OllamaAPIKey   string
+	OllamaModel    string
+	OllamaBaseURL  string
 	DatabasePath   string
 }
 
@@ -28,8 +29,9 @@ func LoadConfig(envPath string) (Config, error) {
 		AdminEmail:     os.Getenv("ADMIN_EMAIL"),
 		AdminPassword:  os.Getenv("ADMIN_PASSWORD"),
 		FrontendOrigin: envOrDefault("FRONTEND_ORIGIN", "*"),
-		NVIDIAAPIKey:   os.Getenv("NVIDIA_API_KEY"),
-		NVIDIAModel:    envOrDefault("NVIDIA_MODEL", "qwen/qwen3-next-80b-a3b-instruct"),
+		OllamaAPIKey:   os.Getenv("OLLAMA_API_KEY"),
+		OllamaModel:    envOrDefault("OLLAMA_MODEL", "qwen3-coder:480b-cloud"),
+		OllamaBaseURL:  envOrDefault("OLLAMA_BASE_URL", "https://api.ollama.com/v1/chat/completions"),
 		DatabasePath:   filepath.Join("data", "progress.db"),
 	}
 
