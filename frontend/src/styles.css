@@ -288,8 +288,7 @@ label span {
 }
 
 .roadmap-graph {
-  min-width: 620px;
-  width: 100%;
+  display: block;
 }
 
 .roadmap-graph line {
@@ -539,6 +538,31 @@ label span {
 
 .form-submit-row {
   display: flex;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.zoom-btn {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.zoom-label {
+  font-size: 0.85rem;
+  color: #c7bfb0;
+  min-width: 3rem;
+  text-align: center;
 }
 
 @media (max-width: 960px) {

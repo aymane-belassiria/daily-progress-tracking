@@ -274,48 +274,76 @@ function EntryList({ entries }) {
 }
 
 function RoadmapGraph({ roadmap, selectedNodeId, onSelectNode }) {
+  const [zoom, setZoom] = useState(1);
   const layout = buildGraphLayout(roadmap?.nodes || []);
   const byDayIndex = new Map(layout.nodes.map((node) => [node.day_index, node]));
 
   return (
-    <div className="roadmap-graph-wrap">
-      <svg className="roadmap-graph" viewBox={`0 0 ${layout.width} ${layout.height}`} role="img" aria-label="Roadmap graph">
-        {layout.edges.map((edge) => {
-          const from = byDayIndex.get(edge.from);
-          const to = byDayIndex.get(edge.to);
-          if (!from || !to) {
-            return null;
-          }
-          return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />;
-        })}
-        {layout.nodes.map((node) => {
-          const doneTasks = (node.tasks || []).filter((task) => task.done).length;
-          const totalTasks = (node.tasks || []).length || 1;
-          const isSelected = node.id === selectedNodeId;
-          return (
-            <g
-              key={node.id}
-              className={`roadmap-node ${isSelected ? "selected" : ""}`}
-              transform={`translate(${node.x}, ${node.y})`}
-              onClick={() => onSelectNode(node.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelectNode(node.id);
-                }
-              }}
-              role="button"
-              tabIndex="0"
-            >
-              <circle r="30" />
-              <text y="-3">{node.day_index}</text>
-              <text y="15" className="node-progress">
-                {doneTasks}/{totalTasks}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+    <div>
+      <div className="zoom-controls">
+        <button
+          type="button"
+          className="secondary zoom-btn"
+          onClick={() => setZoom((z) => Math.max(0.5, parseFloat((z - 0.25).toFixed(2))))}
+          aria-label="Zoom out"
+        >
+          −
+        </button>
+        <span className="zoom-label">{Math.round(zoom * 100)}%</span>
+        <button
+          type="button"
+          className="secondary zoom-btn"
+          onClick={() => setZoom((z) => Math.min(3, parseFloat((z + 0.25).toFixed(2))))}
+          aria-label="Zoom in"
+        >
+          +
+        </button>
+      </div>
+      <div className="roadmap-graph-wrap">
+        <svg
+          className="roadmap-graph"
+          viewBox={`0 0 ${layout.width} ${layout.height}`}
+          style={{ width: `${layout.width * zoom}px`, height: `${layout.height * zoom}px` }}
+          role="img"
+          aria-label="Roadmap graph"
+        >
+          {layout.edges.map((edge) => {
+            const from = byDayIndex.get(edge.from);
+            const to = byDayIndex.get(edge.to);
+            if (!from || !to) {
+              return null;
+            }
+            return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />;
+          })}
+          {layout.nodes.map((node) => {
+            const doneTasks = (node.tasks || []).filter((task) => task.done).length;
+            const totalTasks = (node.tasks || []).length || 1;
+            const isSelected = node.id === selectedNodeId;
+            return (
+              <g
+                key={node.id}
+                className={`roadmap-node ${isSelected ? "selected" : ""}`}
+                transform={`translate(${node.x}, ${node.y})`}
+                onClick={() => onSelectNode(node.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectNode(node.id);
+                  }
+                }}
+                role="button"
+                tabIndex="0"
+              >
+                <circle r="30" />
+                <text y="-3">{node.day_index}</text>
+                <text y="15" className="node-progress">
+                  {doneTasks}/{totalTasks}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
     </div>
   );
 }
