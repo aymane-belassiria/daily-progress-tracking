@@ -604,10 +604,6 @@ label span {
     flex-direction: column;
   }
 
-  .roadmap-graph {
-    min-width: 520px;
-  }
-
   button {
     width: 100%;
   }
