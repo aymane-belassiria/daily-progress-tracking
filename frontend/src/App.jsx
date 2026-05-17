@@ -4,6 +4,16 @@ import { buildGraphLayout, buildScoreTrend, scoreLabel, taskTotals } from "./roa
 
 const today = new Date().toISOString().slice(0, 10);
 
+const PERIOD_LABELS = {
+  daily: "Daily",
+  weekly: "Weekly",
+  "2-weeks": "2 Weeks",
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  "6-months": "6 Months",
+  yearly: "Yearly",
+};
+
 const emptyGoal = {
   period: "weekly",
   title: "",
@@ -830,8 +840,6 @@ export default function App() {
     );
   }
 
-  const weekly = dashboard.goals.filter((goal) => goal.period === "weekly");
-  const monthly = dashboard.goals.filter((goal) => goal.period === "monthly");
   const entryCount = dashboard.entries.length;
   const nonEmptyStats = dashboard.stats.filter((s) => s.total > 0);
   const displayStats = nonEmptyStats.length > 0
@@ -863,7 +871,7 @@ export default function App() {
         {displayStats.map((stat) => (
           <StatCard
             key={stat.period}
-            label={stat.period.charAt(0).toUpperCase() + stat.period.slice(1)}
+            label={PERIOD_LABELS[stat.period] ?? (stat.period.charAt(0).toUpperCase() + stat.period.slice(1))}
             value={`${stat.averageCompletion}%`}
             subvalue={`${stat.completed}/${stat.total} completed`}
           />
@@ -914,34 +922,36 @@ export default function App() {
           />
 
           <div className="split-panel">
-            <div>
-              <p className="eyebrow section-label">Weekly goals</p>
-              <GoalList
-                goals={weekly}
-                onEdit={(goal) => {
-                  setGoalEditingId(goal.id);
-                  setGoalForm({
-                    ...goal,
-                    due_date: goal.due_date || ""
-                  });
-                }}
-                onDelete={handleDeleteGoal}
-              />
-            </div>
-            <div>
-              <p className="eyebrow section-label">Monthly goals</p>
-              <GoalList
-                goals={monthly}
-                onEdit={(goal) => {
-                  setGoalEditingId(goal.id);
-                  setGoalForm({
-                    ...goal,
-                    due_date: goal.due_date || ""
-                  });
-                }}
-                onDelete={handleDeleteGoal}
-              />
-            </div>
+            {(() => {
+              const goalPeriods = ["weekly", "monthly", ...dashboard.goals
+                .map((g) => g.period)
+                .filter((p, i, arr) => p !== "weekly" && p !== "monthly" && arr.indexOf(p) === i)
+              ];
+              return goalPeriods.map((period) => {
+                const periodGoals = dashboard.goals.filter((g) => g.period === period);
+                const label = PERIOD_LABELS[period] ?? (period.charAt(0).toUpperCase() + period.slice(1));
+                return (
+                  <div key={period}>
+                    <p className="eyebrow section-label">{label} goals</p>
+                    {periodGoals.length === 0 ? (
+                      <p className="muted">No {label.toLowerCase()} goals yet.</p>
+                    ) : (
+                      <GoalList
+                        goals={periodGoals}
+                        onEdit={(goal) => {
+                          setGoalEditingId(goal.id);
+                          setGoalForm({
+                            ...goal,
+                            due_date: goal.due_date || ""
+                          });
+                        }}
+                        onDelete={handleDeleteGoal}
+                      />
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
 

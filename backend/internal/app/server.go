@@ -169,8 +169,8 @@ func (s *Server) handleGoals(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		period := r.URL.Query().Get("period")
-		if period != "" && len(period) > 32 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid period."})
+		if period != "" && (strings.TrimSpace(period) == "" || len(period) > 32) {
+			http.Error(w, `{"error":"invalid period parameter"}`, http.StatusBadRequest)
 			return
 		}
 

@@ -61,7 +61,7 @@ func initSchema(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS goals (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			period TEXT NOT NULL CHECK(period IN ('weekly', 'monthly')),
+			period TEXT NOT NULL,
 			title TEXT NOT NULL,
 			description TEXT DEFAULT '',
 			target_value INTEGER DEFAULT 1,
@@ -87,7 +87,7 @@ func initSchema(db *sql.DB) error {
 		CREATE TABLE IF NOT EXISTS roadmaps (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			goal_id INTEGER NOT NULL,
-			period TEXT NOT NULL CHECK(period IN ('weekly', 'monthly')),
+			period TEXT NOT NULL,
 			start_date TEXT NOT NULL,
 			end_date TEXT NOT NULL,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -465,6 +465,12 @@ func migrationDone(db *sql.DB, id string) bool {
 }
 
 func migration001FlexiblePeriod(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	steps := []string{
 		`PRAGMA foreign_keys = OFF`,
 		`CREATE TABLE goals_v2 (
@@ -498,11 +504,11 @@ func migration001FlexiblePeriod(db *sql.DB) error {
 		`PRAGMA foreign_keys = ON`,
 	}
 	for _, stmt := range steps {
-		if _, err := db.Exec(stmt); err != nil {
+		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("migration001 failed at %q: %w", stmt[:min(40, len(stmt))], err)
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 func min(a, b int) int {
